@@ -559,9 +559,12 @@
       { id: "mm777", name: "MM777", readyName: "MM777", titleLines: ["MM777"], image: mm777Sprite, spriteW: 84, radius: 19 }
     ];
     const FIREBASE_CONFIG = {
-      apiKey: "PASTE_FIREBASE_API_KEY",
-      authDomain: "PASTE_FIREBASE_AUTH_DOMAIN",
-      projectId: "PASTE_FIREBASE_PROJECT_ID"
+      apiKey: "AIzaSyDYpSDz5PTYPcgchueaUVifIygwpoJFOTM",
+      authDomain: "pip-boy-jetpack-run.firebaseapp.com",
+      projectId: "pip-boy-jetpack-run",
+      storageBucket: "pip-boy-jetpack-run.firebasestorage.app",
+      messagingSenderId: "31464266741",
+      appId: "1:31464266741:web:f925cebb22928fbeaa9ebc"
     };
     const FIREBASE_VERSION = "10.12.4";
     const LEADERBOARD_LIMIT = 5;
@@ -683,8 +686,7 @@
         const scoresQuery = api.query(
           scoresRef,
           api.orderBy("score", "desc"),
-          api.orderBy("createdAt", "asc"),
-          api.limit(LEADERBOARD_LIMIT)
+          api.limit(20)
         );
         const snapshot = await api.getDocs(scoresQuery);
         board.entries = snapshot.docs.map((doc) => {
@@ -692,9 +694,10 @@
           return {
             initials: cleanInitials(data.initials || "???") || "???",
             score: Number(data.score) || 0,
-            characterName: String(data.characterName || "")
+            characterName: String(data.characterName || ""),
+            createdAt: data.createdAt && typeof data.createdAt.toMillis === "function" ? data.createdAt.toMillis() : 0
           };
-        });
+        }).sort((a, b) => b.score - a.score || a.createdAt - b.createdAt).slice(0, LEADERBOARD_LIMIT);
         board.status = board.entries.length ? "Daily board loaded" : "No scores yet today";
       } catch (error) {
         board.entries = [];
