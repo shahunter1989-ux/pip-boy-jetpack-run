@@ -526,6 +526,8 @@
     mm777Sprite.src = "assets/mm777.png";
     const bigzxSprite = new Image();
     bigzxSprite.src = "assets/bigzx.png";
+    const painterSprite = new Image();
+    painterSprite.src = "assets/the-painter.png";
     const backgroundImage = new Image();
     backgroundImage.src = "assets/wasteland-background-clean.png";
     const gameOverImage = new Image();
@@ -547,6 +549,7 @@
       return image;
     });
     const characters = [
+      { id: "painter", name: "The Painter", readyName: "The Painter", titleLines: ["THE", "PAINTER"], image: painterSprite, spriteW: 96, radius: 18 },
       { id: "bigzx", name: "Big ZX", readyName: "Big ZX", titleLines: ["BIG ZX"], image: bigzxSprite, spriteW: 80, radius: 20 },
       { id: "vault", name: "Vault Boy", readyName: "Vault Boy", titleLines: ["VAULT BOY"], image: playerSprite, spriteW: 78, radius: 20 },
       { id: "ducky", name: "Ducky", readyName: "Ducky", titleLines: ["DUCKY"], image: duckySprite, spriteW: 84, radius: 19 },
