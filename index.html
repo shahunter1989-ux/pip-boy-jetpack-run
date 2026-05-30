@@ -549,7 +549,7 @@
       return image;
     });
     const characters = [
-      { id: "painter", name: "The Painter", readyName: "The Painter", titleLines: ["THE", "PAINTER"], image: painterSprite, spriteW: 96, radius: 18 },
+      { id: "painter", name: "The Painter", readyName: "The Painter", titleLines: ["THE", "PAINTER"], image: painterSprite, spriteW: 108, radius: 18 },
       { id: "bigzx", name: "Big ZX", readyName: "Big ZX", titleLines: ["BIG ZX"], image: bigzxSprite, spriteW: 80, radius: 20 },
       { id: "vault", name: "Vault Boy", readyName: "Vault Boy", titleLines: ["VAULT BOY"], image: playerSprite, spriteW: 78, radius: 20 },
       { id: "ducky", name: "Ducky", readyName: "Ducky", titleLines: ["DUCKY"], image: duckySprite, spriteW: 84, radius: 19 },
@@ -558,10 +558,20 @@
       { id: "coffee", name: "Coffee", readyName: "Coffee", titleLines: ["COFFEE"], image: coffeeSprite, spriteW: 82, radius: 18 },
       { id: "mm777", name: "MM777", readyName: "MM777", titleLines: ["MM777"], image: mm777Sprite, spriteW: 84, radius: 19 }
     ];
+    const FIREBASE_CONFIG = {
+      apiKey: "PASTE_FIREBASE_API_KEY",
+      authDomain: "PASTE_FIREBASE_AUTH_DOMAIN",
+      projectId: "PASTE_FIREBASE_PROJECT_ID"
+    };
+    const FIREBASE_VERSION = "10.12.4";
+    const LEADERBOARD_LIMIT = 5;
     const BOOST_COST = 0.25;
     const CAP_MILESTONE = 3;
     const CAP_MILESTONE_CHARGE = 0.25;
     const CAP_FIXED_RECHARGE_CHANCE = 0.25;
+    let leaderboardDb = null;
+    let leaderboardApi = null;
+    let leaderboardInitPromise = null;
 
     const state = {
       phase: "select",
@@ -582,6 +592,17 @@
       stars: [],
       selectedCharacter: 0,
       selectionRects: [],
+      leaderboard: {
+        entries: [],
+        initials: localStorage.getItem("pipBoyJetpackInitials") || "",
+        status: "Firebase config needed",
+        dateKey: "",
+        loading: false,
+        submitted: false,
+        inputRect: null,
+        submitRect: null,
+        restartRect: null
+      },
       soundEnabled: true,
       audio: null,
       player: {
@@ -599,6 +620,134 @@
     const rollCapRecharge = () => (
       Math.random() < CAP_FIXED_RECHARGE_CHANCE ? CAP_MILESTONE_CHARGE : Math.random()
     );
+    const todayBoardKey = () => new Date().toISOString().slice(0, 10);
+    const firebaseValueReady = (value) => (
+      typeof value === "string" &&
+      value.trim() &&
+      !value.includes("PASTE_FIREBASE") &&
+      !value.includes("YOUR_")
+    );
+    const firebaseConfigured = () => (
+      firebaseValueReady(FIREBASE_CONFIG.apiKey) &&
+      firebaseValueReady(FIREBASE_CONFIG.authDomain) &&
+      firebaseValueReady(FIREBASE_CONFIG.projectId)
+    );
+    const cleanInitials = (value) => value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+    const pointInRect = (point, rect) => rect && (
+      point.x >= rect.x &&
+      point.x <= rect.x + rect.w &&
+      point.y >= rect.y &&
+      point.y <= rect.y + rect.h
+    );
+
+    async function initLeaderboard() {
+      if (!firebaseConfigured()) {
+        state.leaderboard.status = "Add Firebase config to enable daily top 5";
+        return null;
+      }
+      if (leaderboardDb && leaderboardApi) {
+        return { db: leaderboardDb, api: leaderboardApi };
+      }
+      if (!leaderboardInitPromise) {
+        leaderboardInitPromise = Promise.all([
+          import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-app.js`),
+          import(`https://www.gstatic.com/firebasejs/${FIREBASE_VERSION}/firebase-firestore.js`)
+        ]).then(([appModule, firestoreModule]) => {
+          const app = appModule.initializeApp(FIREBASE_CONFIG);
+          leaderboardDb = firestoreModule.getFirestore(app);
+          leaderboardApi = firestoreModule;
+          return { db: leaderboardDb, api: leaderboardApi };
+        }).catch((error) => {
+          leaderboardInitPromise = null;
+          throw error;
+        });
+      }
+      return leaderboardInitPromise;
+    }
+
+    async function loadLeaderboard() {
+      const board = state.leaderboard;
+      board.dateKey = todayBoardKey();
+      board.loading = true;
+      board.inputRect = null;
+      board.submitRect = null;
+      board.restartRect = null;
+      try {
+        const firebase = await initLeaderboard();
+        if (!firebase) {
+          board.entries = [];
+          return;
+        }
+        const { db, api } = firebase;
+        const scoresRef = api.collection(db, "leaderboards", board.dateKey, "scores");
+        const scoresQuery = api.query(
+          scoresRef,
+          api.orderBy("score", "desc"),
+          api.orderBy("createdAt", "asc"),
+          api.limit(LEADERBOARD_LIMIT)
+        );
+        const snapshot = await api.getDocs(scoresQuery);
+        board.entries = snapshot.docs.map((doc) => {
+          const data = doc.data();
+          return {
+            initials: cleanInitials(data.initials || "???") || "???",
+            score: Number(data.score) || 0,
+            characterName: String(data.characterName || "")
+          };
+        });
+        board.status = board.entries.length ? "Daily board loaded" : "No scores yet today";
+      } catch (error) {
+        board.entries = [];
+        board.status = "Leaderboard unavailable";
+        console.warn("Leaderboard load failed", error);
+      } finally {
+        board.loading = false;
+      }
+    }
+
+    async function submitLeaderboardScore() {
+      const board = state.leaderboard;
+      if (board.submitted) {
+        return;
+      }
+      let initials = cleanInitials(board.initials);
+      if (!initials) {
+        const typed = window.prompt("Enter initials for the daily Top 5:", "");
+        initials = cleanInitials(typed || "");
+      }
+      if (!initials) {
+        board.status = "Enter initials to submit";
+        return;
+      }
+      board.initials = initials;
+      localStorage.setItem("pipBoyJetpackInitials", initials);
+      board.loading = true;
+      board.status = "Submitting score...";
+      try {
+        const firebase = await initLeaderboard();
+        if (!firebase) {
+          board.status = "Add Firebase config to submit scores";
+          return;
+        }
+        const { db, api } = firebase;
+        const character = characters[state.selectedCharacter] || characters[0];
+        await api.addDoc(api.collection(db, "leaderboards", todayBoardKey(), "scores"), {
+          initials,
+          score: Math.max(0, Math.floor(state.score)),
+          characterId: character.id,
+          characterName: character.name,
+          createdAt: api.serverTimestamp()
+        });
+        board.submitted = true;
+        board.status = "Score submitted";
+        await loadLeaderboard();
+      } catch (error) {
+        board.status = "Submit failed";
+        console.warn("Leaderboard submit failed", error);
+      } finally {
+        board.loading = false;
+      }
+    }
 
     function syncViewportHeight() {
       const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
@@ -739,6 +888,10 @@
       state.obstacles = [];
       state.caps = [];
       state.particles = [];
+      state.leaderboard.submitted = false;
+      state.leaderboard.inputRect = null;
+      state.leaderboard.submitRect = null;
+      state.leaderboard.restartRect = null;
       state.player.x = Math.max(92, state.width * 0.26);
       state.player.y = state.height * 0.48;
       state.player.vy = 0;
@@ -881,6 +1034,9 @@
       state.shake = 16;
       playTone("crash");
       burst(state.player.x, state.player.y, 28, "#ff5d4d");
+      state.leaderboard.submitted = false;
+      state.leaderboard.status = "Loading daily top 5...";
+      loadLeaderboard();
       if (state.score > state.best) {
         state.best = state.score;
         localStorage.setItem("pipBoyJetpackBest", String(state.best));
@@ -1074,7 +1230,7 @@
         if (state.gameOverTimer > 0) {
           drawGameOverScreen();
         } else {
-          drawMessage("SIGNAL LOST", "Start again to recalibrate");
+          drawLeaderboardPanel();
         }
       }
 
@@ -1555,6 +1711,95 @@
       ctx.restore();
     }
 
+    function drawLeaderboardPanel() {
+      const board = state.leaderboard;
+      const boxW = clamp(state.width * 0.78, 300, 610);
+      const boxH = clamp(state.height * 0.74, 258, 390);
+      const x = (state.width - boxW) / 2;
+      const y = (state.height - boxH) / 2;
+      const pad = clamp(boxW * 0.055, 14, 24);
+      const buttonH = clamp(boxH * 0.105, 30, 40);
+      const inputH = buttonH;
+      const bottomY = y + boxH - pad;
+      const inputW = clamp(boxW * 0.28, 78, 126);
+      const buttonW = clamp(boxW * 0.24, 78, 116);
+      const inputX = x + pad;
+      const submitX = inputX + inputW + 8;
+      const restartX = x + boxW - pad - buttonW;
+      const controlsY = bottomY - buttonH;
+      const rowsTop = y + pad + 82;
+      const rowH = clamp((controlsY - rowsTop - 18) / LEADERBOARD_LIMIT, 22, 33);
+
+      board.inputRect = { x: inputX, y: controlsY, w: inputW, h: inputH };
+      board.submitRect = board.submitted ? null : { x: submitX, y: controlsY, w: buttonW, h: buttonH };
+      board.restartRect = { x: restartX, y: controlsY, w: buttonW, h: buttonH };
+
+      ctx.save();
+      ctx.fillStyle = "rgba(5, 12, 6, 0.95)";
+      ctx.strokeStyle = "rgba(156, 255, 109, 0.72)";
+      ctx.lineWidth = 2;
+      roundRect(x, y, boxW, boxH, 8, true, true);
+
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#9cff6d";
+      fitMonoFont("DAILY TOP 5", 28, 18, boxW - pad * 2);
+      ctx.fillText("DAILY TOP 5", state.width / 2, y + pad + 24);
+      ctx.fillStyle = "rgba(217, 255, 208, 0.76)";
+      fitMonoFont(`UTC ${board.dateKey || todayBoardKey()}   SCORE ${state.score}`, 14, 9, boxW - pad * 2);
+      ctx.fillText(`UTC ${board.dateKey || todayBoardKey()}   SCORE ${state.score}`, state.width / 2, y + pad + 48);
+
+      ctx.textAlign = "left";
+      const entries = board.loading ? [] : board.entries;
+      for (let i = 0; i < LEADERBOARD_LIMIT; i += 1) {
+        const rowY = rowsTop + i * rowH;
+        ctx.fillStyle = i % 2 ? "rgba(156, 255, 109, 0.055)" : "rgba(156, 255, 109, 0.1)";
+        roundRect(x + pad, rowY - 15, boxW - pad * 2, rowH - 3, 4, true, false);
+        const entry = entries[i];
+        ctx.fillStyle = entry ? "#d9ffd0" : "rgba(217, 255, 208, 0.36)";
+        fitMonoFont(entry ? `${i + 1}. ${entry.initials}` : `${i + 1}. ---`, 16, 9, boxW * 0.42);
+        ctx.fillText(entry ? `${i + 1}. ${entry.initials}` : `${i + 1}. ---`, x + pad + 10, rowY);
+        ctx.textAlign = "right";
+        fitMonoFont(entry ? String(entry.score) : "--", 16, 9, boxW * 0.2);
+        ctx.fillText(entry ? String(entry.score) : "--", x + boxW - pad - 10, rowY);
+        ctx.textAlign = "left";
+      }
+
+      const status = board.loading ? "Loading..." : board.status;
+      ctx.fillStyle = status.includes("Firebase") || status.includes("unavailable") || status.includes("failed") ? "#ffc857" : "rgba(217, 255, 208, 0.78)";
+      ctx.textAlign = "center";
+      fitMonoFont(status, 12, 8, boxW - pad * 2);
+      ctx.fillText(status, state.width / 2, controlsY - 12);
+
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(0, 0, 0, 0.34)";
+      ctx.strokeStyle = "rgba(156, 255, 109, 0.56)";
+      roundRect(inputX, controlsY, inputW, inputH, 5, true, true);
+      ctx.fillStyle = "#9cff6d";
+      fitMonoFont(board.initials || "INITIALS", 14, 8, inputW - 10);
+      ctx.fillText(board.initials || "INITIALS", inputX + inputW / 2, controlsY + inputH * 0.66);
+
+      if (!board.submitted) {
+        ctx.fillStyle = "rgba(156, 255, 109, 0.12)";
+        ctx.strokeStyle = "rgba(156, 255, 109, 0.64)";
+        roundRect(submitX, controlsY, buttonW, buttonH, 5, true, true);
+        ctx.fillStyle = "#9cff6d";
+        fitMonoFont("SUBMIT", 13, 8, buttonW - 10);
+        ctx.fillText("SUBMIT", submitX + buttonW / 2, controlsY + buttonH * 0.66);
+      } else {
+        ctx.fillStyle = "#ffc857";
+        fitMonoFont("SUBMITTED", 12, 8, buttonW + 10);
+        ctx.fillText("SUBMITTED", submitX + buttonW / 2, controlsY + buttonH * 0.66);
+      }
+
+      ctx.fillStyle = "rgba(255, 200, 87, 0.1)";
+      ctx.strokeStyle = "rgba(255, 200, 87, 0.68)";
+      roundRect(restartX, controlsY, buttonW, buttonH, 5, true, true);
+      ctx.fillStyle = "#ffc857";
+      fitMonoFont("RESTART", 13, 8, buttonW - 10);
+      ctx.fillText("RESTART", restartX + buttonW / 2, controlsY + buttonH * 0.66);
+      ctx.restore();
+    }
+
     function fitMonoFont(text, maxPx, minPx, maxWidth) {
       let size = maxPx;
       do {
@@ -1603,10 +1848,34 @@
       };
     }
 
+    function promptForInitials() {
+      const typed = window.prompt("Enter initials for the daily Top 5:", state.leaderboard.initials || "");
+      if (typed !== null) {
+        state.leaderboard.initials = cleanInitials(typed);
+      }
+    }
+
+    function handleLeaderboardPointer(point) {
+      const board = state.leaderboard;
+      if (pointInRect(point, board.inputRect)) {
+        promptForInitials();
+        return true;
+      }
+      if (pointInRect(point, board.submitRect)) {
+        submitLeaderboardScore();
+        return true;
+      }
+      if (pointInRect(point, board.restartRect)) {
+        resetGame();
+        return true;
+      }
+      return true;
+    }
+
     function handleCanvasPointer(event) {
       useControl(event, () => {
+        const point = canvasPoint(event);
         if (state.phase === "select") {
-          const point = canvasPoint(event);
           const hit = state.selectionRects.find((rect) => (
             point.x >= rect.x &&
             point.x <= rect.x + rect.w &&
@@ -1614,6 +1883,10 @@
             point.y <= rect.y + rect.h
           ));
           chooseCharacter(hit ? hit.index : state.selectedCharacter);
+          return;
+        }
+        if (state.phase === "over" && state.gameOverTimer <= 0) {
+          handleLeaderboardPointer(point);
           return;
         }
         thrust();
@@ -1642,6 +1915,23 @@
     document.addEventListener("touchmove", (event) => event.preventDefault(), { passive: false });
     document.addEventListener("contextmenu", (event) => event.preventDefault());
     window.addEventListener("keydown", (event) => {
+      if (state.phase === "over" && state.gameOverTimer <= 0) {
+        if (event.code === "Enter") {
+          event.preventDefault();
+          submitLeaderboardScore();
+          return;
+        }
+        if (event.code === "Backspace") {
+          event.preventDefault();
+          state.leaderboard.initials = state.leaderboard.initials.slice(0, -1);
+          return;
+        }
+        if (/^[a-z0-9]$/i.test(event.key) && state.leaderboard.initials.length < 10) {
+          event.preventDefault();
+          state.leaderboard.initials = cleanInitials(state.leaderboard.initials + event.key);
+          return;
+        }
+      }
       if (event.code === "Space" || event.code === "ArrowUp") {
         event.preventDefault();
         thrust();
