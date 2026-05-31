@@ -538,7 +538,8 @@
       "assets/wulfzx-bright-day-background.png",
       "assets/wulfzx-sunset-background.png",
       "assets/wulfzx-golden-hour-background.png",
-      "assets/wulfzx-wcx-day-background.png"
+      "assets/wulfzx-wcx-day-background.png",
+      "assets/wulfzx-green-storm-background.png"
     ];
     const backgroundImages = backgroundSpritePaths.map((src) => {
       const image = new Image();
@@ -588,7 +589,8 @@
     const CAP_MILESTONE_CHARGE = 0.25;
     const CAP_FIXED_RECHARGE_CHANCE = 0.25;
     const SELECT_DOUBLE_ACTIVATE_MS = 500;
-    const BACKGROUND_JUMPS_PER_SCENE = 4;
+    const BACKGROUND_JUMPS_PER_SCENE = 8;
+    const BACKGROUND_TRANSITION_SECONDS = 1.8;
     let leaderboardDb = null;
     let leaderboardApi = null;
     let leaderboardInitPromise = null;
@@ -599,7 +601,9 @@
       height: 640,
       time: 0,
       backgroundSceneIndex: 0,
+      backgroundPreviousSceneIndex: 0,
       backgroundJumpCount: 0,
+      backgroundTransitionTime: 0,
       gameOverTimer: 0,
       last: 0,
       shake: 0,
@@ -908,7 +912,9 @@
       state.score = 0;
       state.capsCollected = 0;
       state.backgroundSceneIndex = 0;
+      state.backgroundPreviousSceneIndex = 0;
       state.backgroundJumpCount = 0;
+      state.backgroundTransitionTime = 0;
       state.speed = 224;
       state.gap = 232;
       state.obstacles = [];
@@ -1058,12 +1064,16 @@
         const nextIndex = (state.backgroundSceneIndex + step) % backgroundImages.length;
         const image = backgroundImages[nextIndex];
         if (image.complete && image.naturalWidth) {
+          state.backgroundPreviousSceneIndex = state.backgroundSceneIndex;
           state.backgroundSceneIndex = nextIndex;
+          state.backgroundTransitionTime = BACKGROUND_TRANSITION_SECONDS;
           return;
         }
       }
 
+      state.backgroundPreviousSceneIndex = state.backgroundSceneIndex;
       state.backgroundSceneIndex = (state.backgroundSceneIndex + 1) % backgroundImages.length;
+      state.backgroundTransitionTime = BACKGROUND_TRANSITION_SECONDS;
     }
 
     function burst(x, y, count, color) {
@@ -1118,6 +1128,7 @@
 
     function update(dt) {
       state.time += dt;
+      state.backgroundTransitionTime = Math.max(0, state.backgroundTransitionTime - dt);
       state.shake = Math.max(0, state.shake - dt * 26);
       state.gameOverTimer = Math.max(0, state.gameOverTimer - dt);
 
@@ -1304,8 +1315,24 @@
         const currentBackground = backgroundImages[currentIndex].complete && backgroundImages[currentIndex].naturalWidth
           ? backgroundImages[currentIndex]
           : loadedBackground;
+        const previousIndex = ((state.backgroundPreviousSceneIndex % backgroundImages.length) + backgroundImages.length) % backgroundImages.length;
+        const previousBackground = backgroundImages[previousIndex].complete && backgroundImages[previousIndex].naturalWidth
+          ? backgroundImages[previousIndex]
+          : currentBackground;
+        const transitionProgress = BACKGROUND_TRANSITION_SECONDS > 0
+          ? clamp(1 - state.backgroundTransitionTime / BACKGROUND_TRANSITION_SECONDS, 0, 1)
+          : 1;
+        const fade = transitionProgress * transitionProgress * (3 - 2 * transitionProgress);
 
-        drawCoverImage(currentBackground, 0, 0, state.width, state.height, 0, bgOffsetY, 1.08);
+        if (state.backgroundTransitionTime > 0 && previousBackground !== currentBackground) {
+          drawCoverImage(previousBackground, 0, 0, state.width, state.height, 0, bgOffsetY, 1.08);
+          ctx.save();
+          ctx.globalAlpha = fade;
+          drawCoverImage(currentBackground, 0, 0, state.width, state.height, 0, bgOffsetY, 1.08);
+          ctx.restore();
+        } else {
+          drawCoverImage(currentBackground, 0, 0, state.width, state.height, 0, bgOffsetY, 1.08);
+        }
 
         ctx.fillStyle = "rgba(6, 22, 8, 0.24)";
         ctx.fillRect(0, 0, state.width, state.height);
