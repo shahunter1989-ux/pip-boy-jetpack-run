@@ -555,6 +555,7 @@
       "assets/wzx-radiation-barrel.png",
       "assets/wzx-tnt-barrel.png"
     ];
+    const obstacleSpriteOffsets = [0, -1.5];
     const obstacleSprites = obstacleSpritePaths.map((src) => {
       const image = new Image();
       image.src = src;
@@ -1704,16 +1705,18 @@
       ctx.clip();
 
       const drawW = w + 20;
-      const segmentH = drawW * (sprite.naturalHeight / sprite.naturalWidth);
-      const overlap = Math.max(6, segmentH * 0.08);
-      const step = Math.max(28, segmentH - overlap);
+      const naturalSegmentH = drawW * (sprite.naturalHeight / sprite.naturalWidth);
+      const segmentH = clamp(naturalSegmentH, 96, Math.max(108, state.height * 0.34));
+      const overlap = Math.max(18, segmentH * 0.24);
+      const step = Math.max(34, segmentH - overlap);
+      const drawX = x - 10 + (obstacleSpriteOffsets[spriteIndex] || 0);
       if (top) {
-        for (let yy = y + h - segmentH; yy > y - segmentH; yy -= step) {
-          drawObstacleSprite(sprite, x - 10, yy, drawW, segmentH);
+        for (let yy = y + h - segmentH; yy > y - segmentH - step; yy -= step) {
+          drawObstacleSprite(sprite, drawX, yy, drawW, segmentH);
         }
       } else {
-        for (let yy = y; yy < y + h; yy += step) {
-          drawObstacleSprite(sprite, x - 10, yy, drawW, segmentH);
+        for (let yy = y; yy < y + h + step; yy += step) {
+          drawObstacleSprite(sprite, drawX, yy, drawW, segmentH);
         }
       }
 
