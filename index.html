@@ -528,8 +528,15 @@
     bigzxSprite.src = "assets/bigzx.png";
     const painterSprite = new Image();
     painterSprite.src = "assets/the-painter.png";
-    const backgroundImage = new Image();
-    backgroundImage.src = "assets/wasteland-background-clean.png";
+    const backgroundSpritePaths = [
+      "assets/wasteland-background-clean.png",
+      "assets/wulfzx-underground-background.png"
+    ];
+    const backgroundImages = backgroundSpritePaths.map((src) => {
+      const image = new Image();
+      image.src = src;
+      return image;
+    });
     const gameOverImage = new Image();
     gameOverImage.src = "assets/game-over-screen.png";
     const coinSpritePaths = [
@@ -573,6 +580,8 @@
     const CAP_MILESTONE_CHARGE = 0.25;
     const CAP_FIXED_RECHARGE_CHANCE = 0.25;
     const SELECT_DOUBLE_ACTIVATE_MS = 500;
+    const BACKGROUND_HOLD_SECONDS = 18;
+    const BACKGROUND_FADE_SECONDS = 4;
     let leaderboardDb = null;
     let leaderboardApi = null;
     let leaderboardInitPromise = null;
@@ -582,6 +591,7 @@
       width: 960,
       height: 640,
       time: 0,
+      backgroundTime: 0,
       gameOverTimer: 0,
       last: 0,
       shake: 0,
@@ -1074,6 +1084,7 @@
 
     function update(dt) {
       state.time += dt;
+      state.backgroundTime += dt;
       state.shake = Math.max(0, state.shake - dt * 26);
       state.gameOverTimer = Math.max(0, state.gameOverTimer - dt);
 
@@ -1251,11 +1262,31 @@
     }
 
     function drawBackground() {
-      if (backgroundImage.complete && backgroundImage.naturalWidth) {
+      const loadedBackground = backgroundImages.find((image) => image.complete && image.naturalWidth);
+      if (loadedBackground) {
         const bgOffsetY = state.phase === "select"
           ? 0
           : clamp((state.player.y - state.height * 0.48) * 0.1, -18, 18);
-        drawCoverImage(backgroundImage, 0, 0, state.width, state.height, 0, bgOffsetY, 1.08);
+        const cycleSeconds = BACKGROUND_HOLD_SECONDS + BACKGROUND_FADE_SECONDS;
+        const loopSeconds = cycleSeconds * backgroundImages.length;
+        const loopTime = ((state.backgroundTime % loopSeconds) + loopSeconds) % loopSeconds;
+        const backgroundIndex = Math.floor(loopTime / cycleSeconds) % backgroundImages.length;
+        const localTime = loopTime - backgroundIndex * cycleSeconds;
+        const nextIndex = (backgroundIndex + 1) % backgroundImages.length;
+        const currentBackground = backgroundImages[backgroundIndex].complete && backgroundImages[backgroundIndex].naturalWidth
+          ? backgroundImages[backgroundIndex]
+          : loadedBackground;
+        const nextBackground = backgroundImages[nextIndex];
+
+        drawCoverImage(currentBackground, 0, 0, state.width, state.height, 0, bgOffsetY, 1.08);
+
+        if (localTime > BACKGROUND_HOLD_SECONDS && nextBackground.complete && nextBackground.naturalWidth) {
+          const fade = clamp((localTime - BACKGROUND_HOLD_SECONDS) / BACKGROUND_FADE_SECONDS, 0, 1);
+          ctx.save();
+          ctx.globalAlpha = fade * fade * (3 - 2 * fade);
+          drawCoverImage(nextBackground, 0, 0, state.width, state.height, 0, bgOffsetY, 1.08);
+          ctx.restore();
+        }
 
         ctx.fillStyle = "rgba(6, 22, 8, 0.24)";
         ctx.fillRect(0, 0, state.width, state.height);
