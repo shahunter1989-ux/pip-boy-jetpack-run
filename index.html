@@ -166,19 +166,24 @@
     }
 
     .bar {
-      height: 12px;
-      border: 1px solid rgba(156, 255, 109, 0.38);
-      border-radius: 3px;
-      overflow: hidden;
-      background: rgba(0, 0, 0, 0.34);
+      position: relative;
+      height: 34px;
+      overflow: visible;
+      background: url("assets/core-charger-bar.png") center / 100% 100% no-repeat;
     }
 
     .bar > span {
+      position: absolute;
+      left: 9.5%;
+      top: 31%;
       display: block;
-      height: 100%;
-      width: 100%;
+      height: 28%;
+      width: 76%;
       transform-origin: left center;
       background: linear-gradient(90deg, var(--danger), var(--amber), var(--screen));
+      border-radius: 2px;
+      box-shadow: 0 0 12px rgba(156, 255, 109, 0.28);
+      opacity: 0.82;
       transition: transform 120ms linear;
     }
 
@@ -546,6 +551,8 @@
       image.src = src;
       return image;
     });
+    const coreChargerImage = new Image();
+    coreChargerImage.src = "assets/core-charger-bar.png";
     const gameOverImage = new Image();
     gameOverImage.src = "assets/game-over-screen.png";
     const coinSpritePaths = [
@@ -1799,10 +1806,10 @@
     }
 
     function drawChargeMeter() {
-      const meterW = clamp(state.width * 0.34, 112, 220);
-      const meterH = 12;
+      const meterW = clamp(state.width * 0.42, 132, 250);
+      const meterH = meterW * (113 / 556);
       const x = (state.width - meterW) / 2;
-      const y = 28;
+      const y = 24;
       const charge = clamp(state.player.charge, 0, 1);
 
       ctx.save();
@@ -1811,26 +1818,43 @@
       ctx.fillStyle = "rgba(217, 255, 208, 0.74)";
       ctx.fillText("CORE CHARGE", state.width / 2, y - 8);
 
-      ctx.fillStyle = "rgba(5, 12, 6, 0.72)";
-      ctx.strokeStyle = charge < BOOST_COST ? "rgba(255, 93, 77, 0.82)" : "rgba(156, 255, 109, 0.62)";
-      ctx.lineWidth = 2;
-      roundRect(x, y, meterW, meterH, 3, true, true);
+      if (coreChargerImage.complete && coreChargerImage.naturalWidth) {
+        ctx.drawImage(coreChargerImage, x, y, meterW, meterH);
 
-      const fillW = Math.max(0, (meterW - 4) * charge);
-      const fill = ctx.createLinearGradient(x, 0, x + meterW, 0);
-      fill.addColorStop(0, "#ff5d4d");
-      fill.addColorStop(0.48, "#ffc857");
-      fill.addColorStop(1, "#9cff6d");
-      ctx.fillStyle = fill;
-      roundRect(x + 2, y + 2, fillW, meterH - 4, 2, true, false);
+        const fillX = x + meterW * 0.1;
+        const fillY = y + meterH * 0.26;
+        const fillW = Math.max(0, meterW * 0.77 * charge);
+        const fillH = meterH * 0.26;
+        const fill = ctx.createLinearGradient(fillX, 0, fillX + meterW * 0.77, 0);
+        fill.addColorStop(0, "#ff5d4d");
+        fill.addColorStop(0.48, "#ffc857");
+        fill.addColorStop(1, "#9cff6d");
+        ctx.globalAlpha = 0.82;
+        ctx.fillStyle = fill;
+        roundRect(fillX, fillY, fillW, fillH, 2, true, false);
+        ctx.globalAlpha = 1;
+      } else {
+        ctx.fillStyle = "rgba(5, 12, 6, 0.72)";
+        ctx.strokeStyle = charge < BOOST_COST ? "rgba(255, 93, 77, 0.82)" : "rgba(156, 255, 109, 0.62)";
+        ctx.lineWidth = 2;
+        roundRect(x, y, meterW, 12, 3, true, true);
+
+        const fillW = Math.max(0, (meterW - 4) * charge);
+        const fill = ctx.createLinearGradient(x, 0, x + meterW, 0);
+        fill.addColorStop(0, "#ff5d4d");
+        fill.addColorStop(0.48, "#ffc857");
+        fill.addColorStop(1, "#9cff6d");
+        ctx.fillStyle = fill;
+        roundRect(x + 2, y + 2, fillW, 8, 2, true, false);
+      }
 
       ctx.fillStyle = charge < BOOST_COST ? "#ff8a78" : "#9cff6d";
       ctx.font = "700 10px Courier New";
-      ctx.fillText(`${Math.round(charge * 100)}%`, state.width / 2, y + meterH + 15);
+      ctx.fillText(`${Math.round(charge * 100)}%`, state.width / 2, y + meterH + 12);
 
       const capProgress = state.capsCollected % CAP_MILESTONE;
       ctx.fillStyle = "rgba(255, 200, 87, 0.86)";
-      ctx.fillText(`CAPS ${capProgress}/${CAP_MILESTONE}`, state.width / 2, y + meterH + 29);
+      ctx.fillText(`CAPS ${capProgress}/${CAP_MILESTONE}`, state.width / 2, y + meterH + 25);
       ctx.restore();
     }
 
