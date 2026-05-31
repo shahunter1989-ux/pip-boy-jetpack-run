@@ -634,6 +634,7 @@
       },
       soundEnabled: true,
       audio: null,
+      audioUnlocked: false,
       player: {
         x: 196,
         y: 310,
@@ -827,10 +828,42 @@
         }
         state.audio = new AudioContext();
       }
-      if (state.audio.state === "suspended") {
-        state.audio.resume();
-      }
       return state.audio;
+    }
+
+    function playSilentUnlockPulse(audio) {
+      if (!audio || state.audioUnlocked || audio.state !== "running") {
+        return;
+      }
+      const gain = audio.createGain();
+      const osc = audio.createOscillator();
+      const now = audio.currentTime;
+      gain.gain.setValueAtTime(0.0001, now);
+      osc.frequency.setValueAtTime(40, now);
+      osc.connect(gain);
+      gain.connect(audio.destination);
+      osc.start(now);
+      osc.stop(now + 0.025);
+      state.audioUnlocked = true;
+    }
+
+    function unlockAudio() {
+      const audio = ensureAudio();
+      if (!audio) {
+        return null;
+      }
+      if (audio.state === "suspended") {
+        const resume = audio.resume();
+        if (resume && typeof resume.then === "function") {
+          resume.then(() => playSilentUnlockPulse(audio)).catch(() => {});
+        }
+        if (resume && typeof resume.catch === "function") {
+          resume.catch(() => {});
+        }
+      } else {
+        playSilentUnlockPulse(audio);
+      }
+      return audio;
     }
 
     function playTone(type) {
@@ -838,6 +871,11 @@
       if (!audio) {
         return;
       }
+      if (audio.state === "suspended") {
+        audio.resume().then(() => playTone(type)).catch(() => {});
+        return;
+      }
+      state.audioUnlocked = true;
 
       const now = audio.currentTime;
       const gain = audio.createGain();
@@ -880,6 +918,7 @@
         audio.resume().then(() => playDuckSound()).catch(() => {});
         return;
       }
+      state.audioUnlocked = true;
 
       const now = audio.currentTime;
       [0, 0.075].forEach((offset, index) => {
@@ -932,6 +971,7 @@
     function toggleSound() {
       state.soundEnabled = !state.soundEnabled;
       if (!state.soundEnabled && state.audio) {
+        state.audioUnlocked = false;
         state.audio.suspend();
       } else {
         playTone("select");
@@ -2054,6 +2094,7 @@
     function useControl(event, action) {
       event.preventDefault();
       event.stopPropagation();
+      unlockAudio();
       action();
     }
 
@@ -2152,9 +2193,12 @@
       window.visualViewport.addEventListener("resize", resizeCanvas);
       window.visualViewport.addEventListener("scroll", resizeCanvas);
     }
+    document.addEventListener("pointerdown", unlockAudio, { capture: true, passive: true });
+    document.addEventListener("touchend", unlockAudio, { capture: true, passive: true });
     document.addEventListener("touchmove", (event) => event.preventDefault(), { passive: false });
     document.addEventListener("contextmenu", (event) => event.preventDefault());
     window.addEventListener("keydown", (event) => {
+      unlockAudio();
       if (state.phase === "over" && state.gameOverTimer <= 0) {
         if (event.code === "Enter") {
           event.preventDefault();
@@ -2192,12 +2236,12 @@
       }
     });
     canvas.addEventListener("pointerdown", handleCanvasPointer, { passive: false });
-    startButton.addEventListener("click", resetGame);
-    pauseButton.addEventListener("click", togglePause);
-    soundButton.addEventListener("click", toggleSound);
-    statControl.addEventListener("click", showCharacterSelect);
-    dataControl.addEventListener("click", togglePause);
-    radioControl.addEventListener("click", radioReset);
+    startButton.addEventListener("click", (event) => useControl(event, resetGame));
+    pauseButton.addEventListener("click", (event) => useControl(event, togglePause));
+    soundButton.addEventListener("click", (event) => useControl(event, toggleSound));
+    statControl.addEventListener("click", (event) => useControl(event, showCharacterSelect));
+    dataControl.addEventListener("click", (event) => useControl(event, togglePause));
+    radioControl.addEventListener("click", (event) => useControl(event, radioReset));
     mobileRestartButton.addEventListener("pointerdown", (event) => useControl(event, resetGame), { passive: false });
     mobileBoostButton.addEventListener("pointerdown", (event) => useControl(event, thrust), { passive: false });
     mobilePauseButton.addEventListener("pointerdown", (event) => useControl(event, togglePause), { passive: false });
