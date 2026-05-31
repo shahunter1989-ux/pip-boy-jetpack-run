@@ -1067,19 +1067,20 @@
     }
 
     function advanceBackgroundScene() {
-      for (let step = 1; step <= backgroundImages.length; step += 1) {
-        const nextIndex = (state.backgroundSceneIndex + step) % backgroundImages.length;
-        const image = backgroundImages[nextIndex];
-        if (image.complete && image.naturalWidth) {
-          state.backgroundPreviousSceneIndex = state.backgroundSceneIndex;
-          state.backgroundSceneIndex = nextIndex;
-          state.backgroundTransitionTime = BACKGROUND_TRANSITION_SECONDS;
-          return;
-        }
+      const loadedIndexes = backgroundImages
+        .map((image, index) => ({ image, index }))
+        .filter(({ image }) => image.complete && image.naturalWidth)
+        .map(({ index }) => index);
+
+      if (!loadedIndexes.length) {
+        return;
       }
 
       state.backgroundPreviousSceneIndex = state.backgroundSceneIndex;
-      state.backgroundSceneIndex = (state.backgroundSceneIndex + 1) % backgroundImages.length;
+      const currentIndex = ((state.backgroundSceneIndex % backgroundImages.length) + backgroundImages.length) % backgroundImages.length;
+      const choices = loadedIndexes.filter((index) => index !== currentIndex);
+      const pool = choices.length ? choices : loadedIndexes;
+      state.backgroundSceneIndex = pool[Math.floor(Math.random() * pool.length)];
       state.backgroundTransitionTime = BACKGROUND_TRANSITION_SECONDS;
     }
 
