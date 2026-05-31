@@ -6,7 +6,7 @@ Open `index.html` in a browser to play.
 
 ## Daily leaderboard
 
-The game uses Firebase Firestore for a public daily top-5 scoreboard. Scores are grouped by UTC date under `leaderboards/{YYYY-MM-DD}/scores`, so a fresh board starts each day.
+The game uses Firebase Firestore for a public daily top-5 scoreboard. Scores are grouped by UTC date under `leaderboards/{YYYY-MM-DD}/scores`, so a fresh board starts each day. Each submission is stored as a create-only score entry, and the game displays only the best score per initials.
 
 The project is configured for the Firebase project `pip-boy-jetpack-run`. Firestore should stay on the Spark plan with these rules:
 

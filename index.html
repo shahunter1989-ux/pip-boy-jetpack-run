@@ -840,27 +840,24 @@
         const { db, api } = firebase;
         const character = characters[state.selectedCharacter] || characters[0];
         const score = Math.max(0, Math.floor(state.score));
-        const scoreRef = api.doc(db, "leaderboards", todayBoardKey(), "scores", initials);
-        const scoreSnap = await api.getDoc(scoreRef);
-        const existing = scoreSnap.exists() ? scoreSnap.data() : null;
-        const existingScore = existing ? Math.max(0, Math.floor(Number(existing.score) || 0)) : -1;
-        if (existing && existingScore >= score) {
-          board.submitted = true;
-          await loadLeaderboard();
-          board.status = `${initials} stays at ${existingScore}`;
-          return;
-        }
-        await api.setDoc(scoreRef, {
+        const scoresRef = api.collection(db, "leaderboards", todayBoardKey(), "scores");
+        await api.addDoc(scoresRef, {
           initials,
           score,
           characterId: character.id,
           characterName: character.name,
-          createdAt: existing && existing.createdAt ? existing.createdAt : api.serverTimestamp(),
-          updatedAt: api.serverTimestamp()
-        }, { merge: true });
+          createdAt: api.serverTimestamp()
+        });
         board.submitted = true;
         await loadLeaderboard();
-        board.status = existing ? "Score upgraded" : "Score submitted";
+        const visibleEntry = board.entries.find((entry) => entry.initials === initials);
+        if (visibleEntry && visibleEntry.score > score) {
+          board.status = `${initials} stays at ${visibleEntry.score}`;
+        } else if (visibleEntry && visibleEntry.score === score) {
+          board.status = "Score submitted";
+        } else {
+          board.status = "Score saved";
+        }
       } catch (error) {
         board.status = "Submit failed";
         console.warn("Leaderboard submit failed", error);
