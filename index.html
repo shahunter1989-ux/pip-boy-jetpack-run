@@ -535,6 +535,8 @@
     wyldwolfSprite.src = "assets/wyldwolf.png";
     const painterSprite = new Image();
     painterSprite.src = "assets/the-painter.png";
+    const roccoSprite = new Image();
+    roccoSprite.src = "assets/rocco.png";
     const backgroundSpritePaths = [
       "assets/wasteland-background-clean.png",
       "assets/wulfzx-underground-background.png",
@@ -583,7 +585,8 @@
       { id: "amy", name: "Amy the Nuka Nightmare", readyName: "Amy", titleLines: ["AMY THE", "NUKA NIGHTMARE"], image: amySprite, spriteW: 86, radius: 20 },
       { id: "mayra", name: "Mayra Del Yermo", readyName: "Mayra", titleLines: ["MAYRA", "DEL YERMO"], image: mayraSprite, spriteW: 88, radius: 20 },
       { id: "coffee", name: "Coffee", readyName: "Coffee", titleLines: ["COFFEE"], image: coffeeSprite, spriteW: 82, radius: 18 },
-      { id: "mm777", name: "MM777", readyName: "MM777", titleLines: ["MM777"], image: mm777Sprite, spriteW: 84, radius: 19 }
+      { id: "mm777", name: "MM777", readyName: "MM777", titleLines: ["MM777"], image: mm777Sprite, spriteW: 84, radius: 19 },
+      { id: "rocco", name: "Rocco", readyName: "Rocco", titleLines: ["ROCCO"], image: roccoSprite, spriteW: 92, radius: 20 }
     ];
     const FIREBASE_CONFIG = {
       apiKey: "AIzaSyDYpSDz5PTYPcgchueaUVifIygwpoJFOTM",
@@ -599,6 +602,7 @@
     const CAP_MILESTONE = 3;
     const CAP_MILESTONE_CHARGE = 0.25;
     const CAP_FIXED_RECHARGE_CHANCE = 0.25;
+    const CHARACTERS_PER_PAGE = 8;
     const SELECT_DOUBLE_ACTIVATE_MS = 500;
     const BACKGROUND_JUMPS_PER_SCENE = 8;
     const BACKGROUND_TRANSITION_SECONDS = 1.8;
@@ -630,7 +634,9 @@
       particles: [],
       stars: [],
       selectedCharacter: 0,
+      characterPage: 0,
       selectionRects: [],
+      pageButtonRects: [],
       lastSelectTapIndex: -1,
       lastSelectTapTime: 0,
       leaderboard: {
@@ -658,6 +664,42 @@
     };
 
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    function characterPageCount() {
+      return Math.max(1, Math.ceil(characters.length / CHARACTERS_PER_PAGE));
+    }
+
+    function pageForCharacter(index) {
+      return Math.floor(clamp(index, 0, characters.length - 1) / CHARACTERS_PER_PAGE);
+    }
+
+    function visibleCharacterRange(page = state.characterPage) {
+      const pageIndex = clamp(page, 0, characterPageCount() - 1);
+      const start = pageIndex * CHARACTERS_PER_PAGE;
+      return {
+        page: pageIndex,
+        start,
+        end: Math.min(characters.length, start + CHARACTERS_PER_PAGE)
+      };
+    }
+
+    function resetSelectTapTracker() {
+      state.lastSelectTapIndex = -1;
+      state.lastSelectTapTime = 0;
+    }
+
+    function showCharacterPage(page, focusVisibleCharacter = true) {
+      const range = visibleCharacterRange(page);
+      state.characterPage = range.page;
+      if (
+        focusVisibleCharacter &&
+        (state.selectedCharacter < range.start || state.selectedCharacter >= range.end)
+      ) {
+        state.selectedCharacter = range.start;
+      }
+      resetSelectTapTracker();
+      updateHud();
+    }
+
     const rand = (min, max) => min + Math.random() * (max - min);
     const rollCapRecharge = () => (
       Math.random() < CAP_FIXED_RECHARGE_CHANCE ? CAP_MILESTONE_CHARGE : Math.random()
@@ -1021,6 +1063,7 @@
     function chooseCharacter(index) {
       resetSelectTapTracker();
       state.selectedCharacter = clamp(index, 0, characters.length - 1);
+      state.characterPage = pageForCharacter(state.selectedCharacter);
       clearRun();
       state.phase = "ready";
       playTone("select");
@@ -1029,15 +1072,11 @@
 
     function showCharacterSelect() {
       resetSelectTapTracker();
+      state.characterPage = pageForCharacter(state.selectedCharacter);
       clearRun();
       state.phase = "select";
       playTone("select");
       updateHud();
-    }
-
-    function resetSelectTapTracker() {
-      state.lastSelectTapIndex = -1;
-      state.lastSelectTapTime = 0;
     }
 
     function resetGame() {
@@ -1573,30 +1612,61 @@
       ctx.fillText("CHOOSE PILOT", state.width / 2, titleY);
       ctx.shadowBlur = 0;
 
-      const count = characters.length;
-      const columns = count <= 4 ? count : 4;
-      const rows = Math.ceil(count / columns);
+      const pageCount = characterPageCount();
+      const range = visibleCharacterRange();
+      state.characterPage = range.page;
+      const visibleCharacters = characters.slice(range.start, range.end);
+      const count = visibleCharacters.length;
+      const columns = pageCount > 1 ? 4 : count <= 4 ? count : 4;
+      const rows = pageCount > 1 ? 2 : Math.ceil(count / columns);
       const sidePad = clamp(state.width * 0.035, 10, 18);
       const gapX = clamp(state.width * 0.018, 5, 10);
       const gapY = clamp(state.height * 0.025, 5, 9);
       const hintY = state.height - 14;
+      const pageControlY = hintY - 25;
       const gridTop = clamp(titleY + 18, 52, state.height * 0.31);
-      const gridBottom = hintY - 16;
+      const gridBottom = pageCount > 1 ? pageControlY - 17 : hintY - 16;
       const cardW = Math.max(44, (state.width - sidePad * 2 - gapX * (columns - 1)) / columns);
       const cardH = clamp((gridBottom - gridTop - gapY * (rows - 1)) / rows, 62, 118);
       const totalW = cardW * columns + gapX * (columns - 1);
       const totalH = cardH * rows + gapY * (rows - 1);
       const startX = (state.width - totalW) / 2;
       const startY = gridTop + Math.max(0, (gridBottom - gridTop - totalH) / 2);
-      state.selectionRects = characters.map((character, index) => {
-        const col = index % columns;
-        const row = Math.floor(index / columns);
+      state.selectionRects = visibleCharacters.map((character, visibleIndex) => {
+        const index = range.start + visibleIndex;
+        const col = visibleIndex % columns;
+        const row = Math.floor(visibleIndex / columns);
         const x = startX + col * (cardW + gapX);
         const y = startY + row * (cardH + gapY);
         const selected = index === state.selectedCharacter;
         drawPilotCard(character, x, y, cardW, cardH, selected);
         return { x, y, w: cardW, h: cardH, index };
       });
+      state.pageButtonRects = [];
+
+      if (pageCount > 1) {
+        const buttonW = clamp(state.width * 0.095, 34, 48);
+        const buttonH = clamp(state.height * 0.052, 17, 24);
+        const centerX = state.width / 2;
+        const prevRect = { x: centerX - buttonW - 57, y: pageControlY - buttonH + 7, w: buttonW, h: buttonH, direction: -1 };
+        const nextRect = { x: centerX + 57, y: pageControlY - buttonH + 7, w: buttonW, h: buttonH, direction: 1 };
+        state.pageButtonRects = [prevRect, nextRect];
+
+        [prevRect, nextRect].forEach((rect) => {
+          ctx.fillStyle = "rgba(5, 12, 6, 0.82)";
+          ctx.strokeStyle = "rgba(156, 255, 109, 0.58)";
+          ctx.lineWidth = 2;
+          roundRect(rect.x, rect.y, rect.w, rect.h, 5, true, true);
+          ctx.fillStyle = "#9cff6d";
+          fitMonoFont(rect.direction < 0 ? "<" : ">", 16, 10, rect.w - 10);
+          ctx.fillText(rect.direction < 0 ? "<" : ">", rect.x + rect.w / 2, rect.y + rect.h - 6);
+        });
+
+        ctx.fillStyle = "rgba(217, 255, 208, 0.82)";
+        const pageLabel = `PAGE ${range.page + 1}/${pageCount}`;
+        fitMonoFont(pageLabel, 12, 8, 92);
+        ctx.fillText(pageLabel, centerX, pageControlY);
+      }
 
       ctx.fillStyle = "rgba(217, 255, 208, 0.78)";
       fitMonoFont("CLICK/TAP TO PREVIEW / DOUBLE TO LAUNCH", 13, 8, state.width - 36);
@@ -2224,6 +2294,13 @@
         const point = canvasPoint(event);
         if (state.phase === "select") {
           const now = performance.now();
+          const pageHit = state.pageButtonRects.find((rect) => pointInRect(point, rect));
+          if (pageHit) {
+            showCharacterPage(state.characterPage + pageHit.direction);
+            playTone("select");
+            return;
+          }
+
           const hit = state.selectionRects.find((rect) => (
             point.x >= rect.x &&
             point.x <= rect.x + rect.w &&
@@ -2268,6 +2345,7 @@
       }
       const next = (state.selectedCharacter + direction + characters.length) % characters.length;
       state.selectedCharacter = next;
+      state.characterPage = pageForCharacter(next);
       resetSelectTapTracker();
       playTone("select");
       updateHud();
