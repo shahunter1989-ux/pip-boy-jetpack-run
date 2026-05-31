@@ -223,7 +223,30 @@
       display: none;
     }
 
-    @media (max-width: 820px), (max-height: 520px) {
+    @media (max-width: 820px) {
+      body {
+        padding: 8px;
+        overflow: hidden;
+      }
+
+      .shell {
+        width: min(calc(100vw - 16px), calc((100vh - 16px) * 1.776833));
+      }
+
+      .game-frame {
+        min-height: 0;
+      }
+
+      .screen-wrap {
+        min-height: auto;
+      }
+
+      .controls {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (hover: none) and (pointer: coarse) {
       body {
         height: 100vh;
         height: 100dvh;
@@ -233,42 +256,32 @@
           max(8px, env(safe-area-inset-right))
           max(8px, env(safe-area-inset-bottom))
           max(8px, env(safe-area-inset-left));
-        overflow: hidden;
       }
 
       .shell {
-        height: auto;
+        width: 100%;
+        height: 100%;
         max-width: none;
-        aspect-ratio: 1672 / 941;
-        background: url("assets/pip-boy-ui-shell.png") center / contain no-repeat;
+        aspect-ratio: auto;
+        background:
+          linear-gradient(rgba(0, 0, 0, 0.24), rgba(0, 0, 0, 0.34)),
+          url("assets/pip-boy-ui-shell.png") center / contain no-repeat;
         filter: none;
       }
 
       .game-frame {
-        left: 29.2%;
-        top: 18.2%;
-        right: auto;
-        bottom: auto;
-        width: 34.4%;
-        height: 50.6%;
-        min-height: 0;
+        left: max(8px, env(safe-area-inset-left));
+        top: max(8px, env(safe-area-inset-top));
+        right: max(8px, env(safe-area-inset-right));
+        bottom: calc(82px + env(safe-area-inset-bottom));
+        width: auto;
+        height: auto;
+        min-height: 280px;
       }
 
       .screen-wrap {
-        min-height: auto;
-        border: 0;
-        border-radius: 8% / 10%;
-      }
-
-      .controls {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-
-      .shell {
-        width: min(
-          calc(100vw - max(16px, env(safe-area-inset-left) + env(safe-area-inset-right) + 16px)),
-          calc((var(--app-height, 100dvh) - max(110px, env(safe-area-inset-top) + env(safe-area-inset-bottom) + 96px)) * 1.776833)
-        );
+        border: 2px solid rgba(156, 255, 109, 0.58);
+        border-radius: 10px;
       }
 
       .mobile-actions {
@@ -303,17 +316,12 @@
       }
     }
 
-    @media (max-height: 520px) and (orientation: landscape) {
-      body {
-        justify-items: start;
-        padding-right: calc(286px + env(safe-area-inset-right));
-      }
-
-      .shell {
-        width: min(
-          calc(100vw - 310px - env(safe-area-inset-left) - env(safe-area-inset-right)),
-          calc((var(--app-height, 100dvh) - max(16px, env(safe-area-inset-top) + env(safe-area-inset-bottom) + 16px)) * 1.776833)
-        );
+    @media (hover: none) and (pointer: coarse) and (orientation: landscape) {
+      .game-frame {
+        left: calc(max(8px, env(safe-area-inset-left)) + 4vw);
+        right: calc(max(8px, env(safe-area-inset-right)) + 286px);
+        bottom: max(8px, env(safe-area-inset-bottom));
+        min-height: 0;
       }
 
       .mobile-actions {
@@ -350,7 +358,7 @@
       touch-action: manipulation;
     }
 
-    @media (max-width: 820px), (max-height: 520px) {
+    @media (hover: none) and (pointer: coarse) {
       .sound-button {
         top: auto;
         bottom: calc(78px + env(safe-area-inset-bottom));
@@ -358,7 +366,7 @@
       }
     }
 
-    @media (max-height: 520px) and (orientation: landscape) {
+    @media (hover: none) and (pointer: coarse) and (orientation: landscape) {
       .sound-button {
         bottom: calc(64px + env(safe-area-inset-bottom));
       }
@@ -407,7 +415,7 @@
       background: rgba(156, 255, 109, 0.12);
     }
 
-    @media (max-width: 820px), (max-height: 520px) {
+    @media (hover: none) and (pointer: coarse) {
       .pip-nav {
         left: auto;
         right: max(10px, env(safe-area-inset-right));
@@ -564,7 +572,6 @@
     const CAP_MILESTONE = 3;
     const CAP_MILESTONE_CHARGE = 0.25;
     const CAP_FIXED_RECHARGE_CHANCE = 0.25;
-    const SELECT_DOUBLE_TAP_MS = 450;
     let leaderboardDb = null;
     let leaderboardApi = null;
     let leaderboardInitPromise = null;
@@ -587,9 +594,6 @@
       particles: [],
       stars: [],
       selectedCharacter: 0,
-      highlightedCharacter: 0,
-      lastSelectTapIndex: -1,
-      lastSelectTapTime: 0,
       selectionRects: [],
       leaderboard: {
         entries: [],
@@ -616,13 +620,6 @@
 
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
     const rand = (min, max) => min + Math.random() * (max - min);
-    const isMobileViewport = () => window.matchMedia && (
-      window.matchMedia("(max-width: 820px)").matches ||
-      window.matchMedia("(max-height: 520px)").matches
-    );
-    const isTouchSelectMode = (event) => (
-      event && (event.pointerType === "touch" || event.pointerType === "pen")
-    ) || isMobileViewport() || (window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches);
     const rollCapRecharge = () => (
       Math.random() < CAP_FIXED_RECHARGE_CHANCE ? CAP_MILESTONE_CHARGE : Math.random()
     );
@@ -908,9 +905,6 @@
 
     function chooseCharacter(index) {
       state.selectedCharacter = clamp(index, 0, characters.length - 1);
-      state.highlightedCharacter = state.selectedCharacter;
-      state.lastSelectTapIndex = -1;
-      state.lastSelectTapTime = 0;
       clearRun();
       state.phase = "ready";
       playTone("select");
@@ -920,9 +914,6 @@
     function showCharacterSelect() {
       clearRun();
       state.phase = "select";
-      state.highlightedCharacter = state.selectedCharacter;
-      state.lastSelectTapIndex = -1;
-      state.lastSelectTapTime = 0;
       playTone("select");
       updateHud();
     }
@@ -1326,12 +1317,8 @@
       const hintY = state.height - 14;
       const gridTop = clamp(titleY + 18, 52, state.height * 0.31);
       const gridBottom = hintY - 16;
-      const availableGridW = state.width - sidePad * 2 - gapX * (columns - 1);
-      const availableGridH = gridBottom - gridTop - gapY * (rows - 1);
-      const minCardW = state.width < 220 ? 18 : 44;
-      const minCardH = state.height < 180 ? 20 : 62;
-      const cardW = Math.max(minCardW, availableGridW / columns);
-      const cardH = clamp(availableGridH / rows, minCardH, 118);
+      const cardW = Math.max(44, (state.width - sidePad * 2 - gapX * (columns - 1)) / columns);
+      const cardH = clamp((gridBottom - gridTop - gapY * (rows - 1)) / rows, 62, 118);
       const totalW = cardW * columns + gapX * (columns - 1);
       const totalH = cardH * rows + gapY * (rows - 1);
       const startX = (state.width - totalW) / 2;
@@ -1346,10 +1333,9 @@
         return { x, y, w: cardW, h: cardH, index };
       });
 
-      const selectHint = isTouchSelectMode() ? "TAP TO PREVIEW / DOUBLE TAP TO LAUNCH" : "Tap a pilot, then boost to fly";
       ctx.fillStyle = "rgba(217, 255, 208, 0.78)";
-      fitMonoFont(selectHint, 13, 8, state.width - 36);
-      ctx.fillText(selectHint, state.width / 2, hintY);
+      fitMonoFont("Tap a pilot, then boost to fly", 13, 9, state.width - 36);
+      ctx.fillText("Tap a pilot, then boost to fly", state.width / 2, hintY);
       ctx.restore();
     }
 
@@ -1364,26 +1350,23 @@
       ctx.shadowBlur = 0;
 
       const imageY = y + h * 0.30;
-      const imageW = Math.max(10, Math.min(w * 0.76, character.spriteW * 0.95, h * 0.82));
+      const imageW = Math.min(w * 0.76, character.spriteW * 0.95, h * 0.82);
       drawCharacterImage(character, x + w / 2, imageY, imageW, Math.sin(state.time * 2.4) * 0.06, selected);
 
       ctx.textAlign = "center";
       ctx.fillStyle = selected ? "#ffffff" : "#9cff6d";
       const titleLines = character.titleLines || [character.name.toUpperCase()];
-      const compactCard = h < 42 || w < 36;
-      const lineHeight = compactCard ? clamp(h * 0.16, 3, 7) : clamp(h * 0.13, 8, 12);
-      const nameMax = compactCard ? clamp(h * 0.18, 4, 8) : clamp(h * 0.16, 10, 14);
-      const titleStart = compactCard ? y + h - 8 - Math.max(0, titleLines.length - 1) * lineHeight : y + h - 27 - Math.max(0, titleLines.length - 1) * lineHeight;
+      const lineHeight = clamp(h * 0.13, 8, 12);
+      const nameMax = clamp(h * 0.16, 10, 14);
+      const titleStart = y + h - 27 - Math.max(0, titleLines.length - 1) * lineHeight;
       titleLines.forEach((line, index) => {
         fitMonoFont(line, nameMax, 6, w - 8);
         ctx.fillText(line, x + w / 2, titleStart + index * lineHeight);
       });
 
-      if (!compactCard) {
-        ctx.fillStyle = selected ? "#ffc857" : "rgba(217, 255, 208, 0.68)";
-        fitMonoFont(selected ? "READY" : "SELECT", clamp(h * 0.13, 8, 11), 6, w - 14);
-        ctx.fillText(selected ? "READY" : "SELECT", x + w / 2, y + h - 8);
-      }
+      ctx.fillStyle = selected ? "#ffc857" : "rgba(217, 255, 208, 0.68)";
+      fitMonoFont(selected ? "READY" : "SELECT", clamp(h * 0.13, 8, 11), 6, w - 14);
+      ctx.fillText(selected ? "READY" : "SELECT", x + w / 2, y + h - 8);
       ctx.restore();
     }
 
@@ -1902,32 +1885,7 @@
             point.y >= rect.y &&
             point.y <= rect.y + rect.h
           ));
-          if (!hit) {
-            state.lastSelectTapIndex = -1;
-            state.lastSelectTapTime = 0;
-            return;
-          }
-          if (isTouchSelectMode(event)) {
-            const now = performance.now();
-            const repeatTap = (
-              state.lastSelectTapIndex === hit.index &&
-              state.selectedCharacter === hit.index &&
-              now - state.lastSelectTapTime <= SELECT_DOUBLE_TAP_MS
-            );
-            if (repeatTap) {
-              chooseCharacter(hit.index);
-              resetGame();
-              return;
-            }
-            state.selectedCharacter = hit.index;
-            state.highlightedCharacter = hit.index;
-            state.lastSelectTapIndex = hit.index;
-            state.lastSelectTapTime = now;
-            playTone("select");
-            updateHud();
-            return;
-          }
-          chooseCharacter(hit.index);
+          chooseCharacter(hit ? hit.index : state.selectedCharacter);
           return;
         }
         if (state.phase === "over" && state.gameOverTimer <= 0) {
@@ -1944,9 +1902,6 @@
       }
       const next = (state.selectedCharacter + direction + characters.length) % characters.length;
       state.selectedCharacter = next;
-      state.highlightedCharacter = next;
-      state.lastSelectTapIndex = -1;
-      state.lastSelectTapTime = 0;
       playTone("select");
       updateHud();
     }
