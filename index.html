@@ -223,30 +223,7 @@
       display: none;
     }
 
-    @media (max-width: 820px) {
-      body {
-        padding: 8px;
-        overflow: hidden;
-      }
-
-      .shell {
-        width: min(calc(100vw - 16px), calc((var(--app-height, 100dvh) - 16px) * 1.776833));
-      }
-
-      .game-frame {
-        min-height: 0;
-      }
-
-      .screen-wrap {
-        min-height: auto;
-      }
-
-      .controls {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
-    }
-
-    @media (hover: none) and (pointer: coarse) {
+    @media (max-width: 820px), (max-height: 520px) {
       body {
         height: 100vh;
         height: 100dvh;
@@ -256,13 +233,10 @@
           max(8px, env(safe-area-inset-right))
           max(8px, env(safe-area-inset-bottom))
           max(8px, env(safe-area-inset-left));
+        overflow: hidden;
       }
 
       .shell {
-        width: min(
-          calc(100vw - max(16px, env(safe-area-inset-left) + env(safe-area-inset-right) + 16px)),
-          calc((var(--app-height, 100dvh) - max(16px, env(safe-area-inset-top) + env(safe-area-inset-bottom) + 16px)) * 1.776833)
-        );
         height: auto;
         max-width: none;
         aspect-ratio: 1672 / 941;
@@ -281,8 +255,20 @@
       }
 
       .screen-wrap {
+        min-height: auto;
         border: 0;
         border-radius: 8% / 10%;
+      }
+
+      .controls {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .shell {
+        width: min(
+          calc(100vw - max(16px, env(safe-area-inset-left) + env(safe-area-inset-right) + 16px)),
+          calc((var(--app-height, 100dvh) - max(110px, env(safe-area-inset-top) + env(safe-area-inset-bottom) + 96px)) * 1.776833)
+        );
       }
 
       .mobile-actions {
@@ -317,7 +303,19 @@
       }
     }
 
-    @media (hover: none) and (pointer: coarse) and (orientation: landscape) {
+    @media (max-height: 520px) and (orientation: landscape) {
+      body {
+        justify-items: start;
+        padding-right: calc(286px + env(safe-area-inset-right));
+      }
+
+      .shell {
+        width: min(
+          calc(100vw - 310px - env(safe-area-inset-left) - env(safe-area-inset-right)),
+          calc((var(--app-height, 100dvh) - max(16px, env(safe-area-inset-top) + env(safe-area-inset-bottom) + 16px)) * 1.776833)
+        );
+      }
+
       .mobile-actions {
         grid-template-columns: 74px 98px 74px;
         left: auto;
@@ -352,7 +350,7 @@
       touch-action: manipulation;
     }
 
-    @media (hover: none) and (pointer: coarse) {
+    @media (max-width: 820px), (max-height: 520px) {
       .sound-button {
         top: auto;
         bottom: calc(78px + env(safe-area-inset-bottom));
@@ -360,7 +358,7 @@
       }
     }
 
-    @media (hover: none) and (pointer: coarse) and (orientation: landscape) {
+    @media (max-height: 520px) and (orientation: landscape) {
       .sound-button {
         bottom: calc(64px + env(safe-area-inset-bottom));
       }
@@ -409,7 +407,7 @@
       background: rgba(156, 255, 109, 0.12);
     }
 
-    @media (hover: none) and (pointer: coarse) {
+    @media (max-width: 820px), (max-height: 520px) {
       .pip-nav {
         left: auto;
         right: max(10px, env(safe-area-inset-right));
@@ -618,9 +616,13 @@
 
     const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
     const rand = (min, max) => min + Math.random() * (max - min);
+    const isMobileViewport = () => window.matchMedia && (
+      window.matchMedia("(max-width: 820px)").matches ||
+      window.matchMedia("(max-height: 520px)").matches
+    );
     const isTouchSelectMode = (event) => (
       event && (event.pointerType === "touch" || event.pointerType === "pen")
-    ) || (window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches);
+    ) || isMobileViewport() || (window.matchMedia && window.matchMedia("(hover: none) and (pointer: coarse)").matches);
     const rollCapRecharge = () => (
       Math.random() < CAP_FIXED_RECHARGE_CHANCE ? CAP_MILESTONE_CHARGE : Math.random()
     );
