@@ -591,9 +591,11 @@
     const SELECT_DOUBLE_ACTIVATE_MS = 500;
     const BACKGROUND_JUMPS_PER_SCENE = 8;
     const BACKGROUND_TRANSITION_SECONDS = 1.8;
+    const BACKGROUND_LAYER_ZOOM = 1.08;
     let leaderboardDb = null;
     let leaderboardApi = null;
     let leaderboardInitPromise = null;
+    let backgroundLayerCache = null;
 
     const state = {
       phase: "select",
@@ -985,7 +987,12 @@
       state.width = rect.width;
       state.height = rect.height;
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
+      resetBackgroundLayerCache();
       seedStars();
+    }
+
+    function resetBackgroundLayerCache() {
+      backgroundLayerCache = null;
     }
 
     function seedStars() {
@@ -1325,13 +1332,13 @@
         const fade = transitionProgress * transitionProgress * (3 - 2 * transitionProgress);
 
         if (state.backgroundTransitionTime > 0 && previousBackground !== currentBackground) {
-          drawCoverImage(previousBackground, 0, 0, state.width, state.height, 0, bgOffsetY, 1.08);
+          drawBackgroundLayer(previousIndex, previousBackground, bgOffsetY);
           ctx.save();
           ctx.globalAlpha = fade;
-          drawCoverImage(currentBackground, 0, 0, state.width, state.height, 0, bgOffsetY, 1.08);
+          drawBackgroundLayer(currentIndex, currentBackground, bgOffsetY);
           ctx.restore();
         } else {
-          drawCoverImage(currentBackground, 0, 0, state.width, state.height, 0, bgOffsetY, 1.08);
+          drawBackgroundLayer(currentIndex, currentBackground, bgOffsetY);
         }
 
         ctx.fillStyle = "rgba(6, 22, 8, 0.24)";
@@ -1382,6 +1389,68 @@
         ctx.lineTo(x + 36, state.height);
         ctx.stroke();
       }
+    }
+
+    function drawBackgroundLayer(index, fallbackImage, offsetY) {
+      const layer = getBackgroundLayer(index);
+      if (!layer) {
+        drawCoverImage(fallbackImage, 0, 0, state.width, state.height, 0, offsetY, BACKGROUND_LAYER_ZOOM);
+        return;
+      }
+
+      const maxOffsetY = Math.max(0, (layer.height - state.height) * 0.5);
+      const drawX = layer.x;
+      const drawY = layer.y + clamp(offsetY, -maxOffsetY, maxOffsetY);
+      ctx.drawImage(layer.canvas, drawX, drawY, layer.width, layer.height);
+    }
+
+    function getBackgroundLayer(index) {
+      const image = backgroundImages[index];
+      if (!image || !image.complete || !image.naturalWidth) {
+        return null;
+      }
+
+      const cacheWidth = Math.max(1, Math.round(state.width));
+      const cacheHeight = Math.max(1, Math.round(state.height));
+      const cacheKey = `${cacheWidth}x${cacheHeight}:${BACKGROUND_LAYER_ZOOM}`;
+      if (!backgroundLayerCache || backgroundLayerCache.key !== cacheKey) {
+        backgroundLayerCache = { key: cacheKey, layers: new Map() };
+      }
+
+      if (backgroundLayerCache.layers.has(index)) {
+        return backgroundLayerCache.layers.get(index);
+      }
+
+      const imageRatio = image.naturalWidth / image.naturalHeight;
+      const targetRatio = state.width / state.height;
+      let layerWidth = state.width;
+      let layerHeight = state.height;
+      if (targetRatio > imageRatio) {
+        layerHeight = state.width / imageRatio;
+      } else {
+        layerWidth = state.height * imageRatio;
+      }
+
+      layerWidth = Math.max(1, Math.ceil(layerWidth * BACKGROUND_LAYER_ZOOM));
+      layerHeight = Math.max(1, Math.ceil(layerHeight * BACKGROUND_LAYER_ZOOM));
+
+      const canvasLayer = document.createElement("canvas");
+      canvasLayer.width = layerWidth;
+      canvasLayer.height = layerHeight;
+      const layerCtx = canvasLayer.getContext("2d");
+      layerCtx.imageSmoothingEnabled = true;
+      layerCtx.imageSmoothingQuality = "high";
+      layerCtx.drawImage(image, 0, 0, layerWidth, layerHeight);
+
+      const layer = {
+        canvas: canvasLayer,
+        width: layerWidth,
+        height: layerHeight,
+        x: (state.width - layerWidth) * 0.5,
+        y: (state.height - layerHeight) * 0.5
+      };
+      backgroundLayerCache.layers.set(index, layer);
+      return layer;
     }
 
     function drawCharacterSelect() {
