@@ -551,6 +551,15 @@
       image.src = src;
       return image;
     });
+    const obstacleSpritePaths = [
+      "assets/wzx-radiation-barrel.png",
+      "assets/wzx-tnt-barrel.png"
+    ];
+    const obstacleSprites = obstacleSpritePaths.map((src) => {
+      const image = new Image();
+      image.src = src;
+      return image;
+    });
     const coreChargerImage = new Image();
     coreChargerImage.src = "assets/core-charger-bar.png";
     const gameOverImage = new Image();
@@ -1077,18 +1086,39 @@
       }));
     }
 
+    function randomObstacleSpritePair() {
+      const first = Math.floor(Math.random() * obstacleSprites.length);
+      if (obstacleSprites.length < 2 || Math.random() < 0.58) {
+        return {
+          topSprite: first,
+          bottomSprite: first,
+          mixSprites: false
+        };
+      }
+      const second = (first + 1 + Math.floor(Math.random() * (obstacleSprites.length - 1))) % obstacleSprites.length;
+      return {
+        topSprite: first,
+        bottomSprite: second,
+        mixSprites: true
+      };
+    }
+
     function spawnObstacle(x = state.width + 80) {
       const margin = Math.max(70, state.height * 0.12);
       const gap = clamp(state.gap - state.score * 0.75, 178, 238);
       const center = rand(margin + gap * 0.5, state.height - margin - gap * 0.5);
       const width = rand(74, 98);
+      const sprites = randomObstacleSpritePair();
       state.obstacles.push({
         x,
         width,
         gapTop: center - gap * 0.5,
         gapBottom: center + gap * 0.5,
         passed: false,
-        stripe: Math.random() > 0.5 ? 1 : -1
+        stripe: Math.random() > 0.5 ? 1 : -1,
+        topSprite: sprites.topSprite,
+        bottomSprite: sprites.bottomSprite,
+        mixSprites: sprites.mixSprites
       });
 
       state.caps.push({
@@ -1640,9 +1670,63 @@
 
     function drawObstacles() {
       for (const obstacle of state.obstacles) {
-        drawPipe(obstacle.x, 0, obstacle.width, obstacle.gapTop, true, obstacle.stripe);
-        drawPipe(obstacle.x, obstacle.gapBottom, obstacle.width, state.height - obstacle.gapBottom, false, obstacle.stripe);
+        drawObstacleStack(obstacle.x, 0, obstacle.width, obstacle.gapTop, obstacle.topSprite, true, obstacle.stripe);
+        drawObstacleStack(
+          obstacle.x,
+          obstacle.gapBottom,
+          obstacle.width,
+          state.height - obstacle.gapBottom,
+          obstacle.bottomSprite,
+          false,
+          obstacle.stripe
+        );
       }
+    }
+
+    function getObstacleSprite(index) {
+      if (!obstacleSprites.length) {
+        return null;
+      }
+      const normalized = ((index || 0) % obstacleSprites.length + obstacleSprites.length) % obstacleSprites.length;
+      return obstacleSprites[normalized];
+    }
+
+    function drawObstacleStack(x, y, w, h, spriteIndex, top, stripe) {
+      const sprite = getObstacleSprite(spriteIndex);
+      if (!sprite || !sprite.complete || !sprite.naturalWidth) {
+        drawPipe(x, y, w, h, top, stripe);
+        return;
+      }
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(x - 12, y, w + 24, h);
+      ctx.clip();
+
+      const drawW = w + 20;
+      const segmentH = drawW * (sprite.naturalHeight / sprite.naturalWidth);
+      const overlap = Math.max(6, segmentH * 0.08);
+      const step = Math.max(28, segmentH - overlap);
+      if (top) {
+        for (let yy = y + h - segmentH; yy > y - segmentH; yy -= step) {
+          drawObstacleSprite(sprite, x - 10, yy, drawW, segmentH);
+        }
+      } else {
+        for (let yy = y; yy < y + h; yy += step) {
+          drawObstacleSprite(sprite, x - 10, yy, drawW, segmentH);
+        }
+      }
+
+      ctx.restore();
+    }
+
+    function drawObstacleSprite(sprite, x, y, w, h) {
+      ctx.save();
+      ctx.shadowColor = "rgba(0, 0, 0, 0.35)";
+      ctx.shadowBlur = 6;
+      ctx.shadowOffsetY = 2;
+      ctx.drawImage(sprite, x, y, w, h);
+      ctx.restore();
     }
 
     function drawPipe(x, y, w, h, top, stripe) {
