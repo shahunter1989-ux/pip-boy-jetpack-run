@@ -572,6 +572,7 @@
     const CAP_MILESTONE = 3;
     const CAP_MILESTONE_CHARGE = 0.25;
     const CAP_FIXED_RECHARGE_CHANCE = 0.25;
+    const SELECT_DOUBLE_ACTIVATE_MS = 500;
     let leaderboardDb = null;
     let leaderboardApi = null;
     let leaderboardInitPromise = null;
@@ -595,6 +596,8 @@
       stars: [],
       selectedCharacter: 0,
       selectionRects: [],
+      lastSelectTapIndex: -1,
+      lastSelectTapTime: 0,
       leaderboard: {
         entries: [],
         initials: localStorage.getItem("pipBoyJetpackInitials") || "",
@@ -904,6 +907,7 @@
     }
 
     function chooseCharacter(index) {
+      resetSelectTapTracker();
       state.selectedCharacter = clamp(index, 0, characters.length - 1);
       clearRun();
       state.phase = "ready";
@@ -912,10 +916,16 @@
     }
 
     function showCharacterSelect() {
+      resetSelectTapTracker();
       clearRun();
       state.phase = "select";
       playTone("select");
       updateHud();
+    }
+
+    function resetSelectTapTracker() {
+      state.lastSelectTapIndex = -1;
+      state.lastSelectTapTime = 0;
     }
 
     function resetGame() {
@@ -1334,8 +1344,8 @@
       });
 
       ctx.fillStyle = "rgba(217, 255, 208, 0.78)";
-      fitMonoFont("Tap a pilot, then boost to fly", 13, 9, state.width - 36);
-      ctx.fillText("Tap a pilot, then boost to fly", state.width / 2, hintY);
+      fitMonoFont("CLICK/TAP TO PREVIEW / DOUBLE TO LAUNCH", 13, 8, state.width - 36);
+      ctx.fillText("CLICK/TAP TO PREVIEW / DOUBLE TO LAUNCH", state.width / 2, hintY);
       ctx.restore();
     }
 
@@ -1879,13 +1889,35 @@
       useControl(event, () => {
         const point = canvasPoint(event);
         if (state.phase === "select") {
+          const now = performance.now();
           const hit = state.selectionRects.find((rect) => (
             point.x >= rect.x &&
             point.x <= rect.x + rect.w &&
             point.y >= rect.y &&
             point.y <= rect.y + rect.h
           ));
-          chooseCharacter(hit ? hit.index : state.selectedCharacter);
+          if (!hit) {
+            resetSelectTapTracker();
+            return;
+          }
+
+          const isDoubleActivate = (
+            hit.index === state.selectedCharacter &&
+            hit.index === state.lastSelectTapIndex &&
+            now - state.lastSelectTapTime <= SELECT_DOUBLE_ACTIVATE_MS
+          );
+
+          if (isDoubleActivate) {
+            chooseCharacter(hit.index);
+            resetGame();
+            return;
+          }
+
+          state.selectedCharacter = hit.index;
+          state.lastSelectTapIndex = hit.index;
+          state.lastSelectTapTime = now;
+          playTone("select");
+          updateHud();
           return;
         }
         if (state.phase === "over" && state.gameOverTimer <= 0) {
@@ -1902,6 +1934,7 @@
       }
       const next = (state.selectedCharacter + direction + characters.length) % characters.length;
       state.selectedCharacter = next;
+      resetSelectTapTracker();
       playTone("select");
       updateHud();
     }
