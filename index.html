@@ -662,6 +662,9 @@
       firebaseValueReady(FIREBASE_CONFIG.projectId)
     );
     const cleanInitials = (value) => value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 10);
+    const scoreEntryTime = (value) => (
+      value && typeof value.toMillis === "function" ? value.toMillis() : 0
+    );
     const pointInRect = (point, rect) => rect && (
       point.x >= rect.x &&
       point.x <= rect.x + rect.w &&
@@ -694,6 +697,32 @@
       return leaderboardInitPromise;
     }
 
+    function scoreboardEntriesFromSnapshot(snapshot) {
+      const byInitials = new Map();
+      for (const doc of snapshot.docs) {
+        const data = doc.data();
+        const initials = cleanInitials(data.initials || doc.id || "???") || "???";
+        const score = Math.max(0, Math.floor(Number(data.score) || 0));
+        const createdAt = scoreEntryTime(data.createdAt);
+        const existing = byInitials.get(initials);
+        if (
+          !existing ||
+          score > existing.score ||
+          (score === existing.score && createdAt && (!existing.createdAt || createdAt < existing.createdAt))
+        ) {
+          byInitials.set(initials, {
+            initials,
+            score,
+            characterName: String(data.characterName || ""),
+            createdAt
+          });
+        }
+      }
+      return Array.from(byInitials.values())
+        .sort((a, b) => b.score - a.score || a.createdAt - b.createdAt)
+        .slice(0, LEADERBOARD_LIMIT);
+    }
+
     async function loadLeaderboard() {
       const board = state.leaderboard;
       board.dateKey = todayBoardKey();
@@ -712,18 +741,10 @@
         const scoresQuery = api.query(
           scoresRef,
           api.orderBy("score", "desc"),
-          api.limit(20)
+          api.limit(50)
         );
         const snapshot = await api.getDocs(scoresQuery);
-        board.entries = snapshot.docs.map((doc) => {
-          const data = doc.data();
-          return {
-            initials: cleanInitials(data.initials || "???") || "???",
-            score: Number(data.score) || 0,
-            characterName: String(data.characterName || ""),
-            createdAt: data.createdAt && typeof data.createdAt.toMillis === "function" ? data.createdAt.toMillis() : 0
-          };
-        }).sort((a, b) => b.score - a.score || a.createdAt - b.createdAt).slice(0, LEADERBOARD_LIMIT);
+        board.entries = scoreboardEntriesFromSnapshot(snapshot);
         board.status = board.entries.length ? "Daily board loaded" : "No scores yet today";
       } catch (error) {
         board.entries = [];
@@ -760,16 +781,28 @@
         }
         const { db, api } = firebase;
         const character = characters[state.selectedCharacter] || characters[0];
-        await api.addDoc(api.collection(db, "leaderboards", todayBoardKey(), "scores"), {
+        const score = Math.max(0, Math.floor(state.score));
+        const scoreRef = api.doc(db, "leaderboards", todayBoardKey(), "scores", initials);
+        const scoreSnap = await api.getDoc(scoreRef);
+        const existing = scoreSnap.exists() ? scoreSnap.data() : null;
+        const existingScore = existing ? Math.max(0, Math.floor(Number(existing.score) || 0)) : -1;
+        if (existing && existingScore >= score) {
+          board.submitted = true;
+          await loadLeaderboard();
+          board.status = `${initials} stays at ${existingScore}`;
+          return;
+        }
+        await api.setDoc(scoreRef, {
           initials,
-          score: Math.max(0, Math.floor(state.score)),
+          score,
           characterId: character.id,
           characterName: character.name,
-          createdAt: api.serverTimestamp()
-        });
+          createdAt: existing && existing.createdAt ? existing.createdAt : api.serverTimestamp(),
+          updatedAt: api.serverTimestamp()
+        }, { merge: true });
         board.submitted = true;
-        board.status = "Score submitted";
         await loadLeaderboard();
+        board.status = existing ? "Score upgraded" : "Score submitted";
       } catch (error) {
         board.status = "Submit failed";
         console.warn("Leaderboard submit failed", error);
