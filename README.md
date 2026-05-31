@@ -1,6 +1,8 @@
-# Pip-Boy Jetpack Run
+# Duck Duck Nuke
 
-A browser game inspired by Flappy Bird: choose a pilot, boost through the wasteland, dodge radiation barrels, and collect Nuka-Cola caps.
+by Wulfzx.Underground
+
+A browser game inspired by Flappy Bird: choose a pilot, boost through the wasteland, dodge WZX barrels, and collect red WZX caps.
 
 Open `index.html` in a browser to play.
 
