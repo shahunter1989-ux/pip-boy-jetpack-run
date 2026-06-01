@@ -571,6 +571,8 @@
     coreChargerImage.src = "assets/core-charger-bar.png";
     const gameOverImage = new Image();
     gameOverImage.src = "assets/game-over-screen.png";
+    const introImage = new Image();
+    introImage.src = "assets/duck-duck-nuke-intro.jpg";
     const coinSpritePaths = [
       "assets/wzx-red-cap.png"
     ];
@@ -617,7 +619,7 @@
     let backgroundLayerCache = null;
 
     const state = {
-      phase: "select",
+      phase: "intro",
       width: 960,
       height: 640,
       time: 0,
@@ -710,6 +712,23 @@
       Math.random() < CAP_FIXED_RECHARGE_CHANCE ? CAP_MILESTONE_CHARGE : Math.random()
     );
     const todayBoardKey = () => new Date().toISOString().slice(0, 10);
+    function leaderboardResetCountdown() {
+      const now = new Date();
+      const resetAt = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1);
+      const remaining = Math.max(0, resetAt - now.getTime());
+      const totalSeconds = Math.floor(remaining / 1000);
+      const hours = Math.floor(totalSeconds / 3600);
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const seconds = totalSeconds % 60;
+      return [hours, minutes, seconds].map((value) => String(value).padStart(2, "0")).join(":");
+    }
+
+    function startPromptText() {
+      const touchLikely = (window.matchMedia && window.matchMedia("(hover: none), (pointer: coarse)").matches) ||
+        Math.min(window.innerWidth, window.innerHeight) <= 820;
+      return touchLikely ? "TAP TO START" : "CLICK TO START";
+    }
+
     const firebaseValueReady = (value) => (
       typeof value === "string" &&
       value.trim() &&
@@ -1086,6 +1105,11 @@
         return;
       }
 
+      if (state.phase === "intro") {
+        showCharacterSelect();
+        return;
+      }
+
       if (state.phase === "select") {
         chooseCharacter(state.selectedCharacter);
         return;
@@ -1400,6 +1424,7 @@
 
     function updateHud() {
       const phaseLabel = {
+        intro: "Intro",
         select: "Select",
         ready: "Ready",
         running: "Running",
@@ -1418,7 +1443,7 @@
       chargeBar.style.transform = `scaleX(${state.player.charge})`;
       startButton.textContent = state.phase === "select" ? "Choose" : state.phase === "running" ? "Restart" : "Start";
       pauseButton.textContent = state.phase === "paused" ? "Resume" : "Pause";
-      mobileRestartButton.textContent = state.phase === "select" ? "Choose" : state.phase === "ready" ? "Start" : "Restart";
+      mobileRestartButton.textContent = state.phase === "intro" ? "Start" : state.phase === "select" ? "Choose" : state.phase === "ready" ? "Start" : "Restart";
       mobilePauseButton.textContent = state.phase === "paused" ? "Resume" : "Pause";
       soundButton.textContent = state.soundEnabled ? "Sound On" : "Sound Off";
       soundButton.setAttribute("aria-pressed", String(state.soundEnabled));
@@ -1432,6 +1457,11 @@
       ctx.translate(sx, sy);
 
       drawBackground();
+      if (state.phase === "intro") {
+        drawIntroScreen();
+        ctx.restore();
+        return;
+      }
       if (state.phase === "select") {
         drawCharacterSelect();
         ctx.restore();
@@ -1536,6 +1566,48 @@
         ctx.lineTo(x + 36, state.height);
         ctx.stroke();
       }
+    }
+
+    function drawIntroScreen() {
+      ctx.save();
+      if (introImage.complete && introImage.naturalWidth) {
+        drawCoverImage(introImage, 0, 0, state.width, state.height);
+      } else {
+        const gradient = ctx.createLinearGradient(0, 0, state.width, state.height);
+        gradient.addColorStop(0, "#161033");
+        gradient.addColorStop(0.48, "#220b2e");
+        gradient.addColorStop(1, "#05162f");
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, state.width, state.height);
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#f8f3dc";
+        fitMonoFont("DUCK DUCK NUKE", 54, 28, state.width - 60);
+        ctx.fillText("DUCK DUCK NUKE", state.width / 2, state.height * 0.46);
+        ctx.fillStyle = "#ffc857";
+        fitMonoFont("BY WULFZX.UNDERGROUND", 20, 12, state.width - 80);
+        ctx.fillText("BY WULFZX.UNDERGROUND", state.width / 2, state.height * 0.54);
+      }
+
+      const prompt = startPromptText();
+      const promptY = state.height - clamp(state.height * 0.11, 48, 74);
+      const boxW = Math.max(96, Math.min(clamp(state.width * 0.52, 230, 430), state.width - 24));
+      const boxH = clamp(state.height * 0.105, 42, 58);
+      const boxX = (state.width - boxW) / 2;
+      const boxY = promptY - boxH * 0.68;
+      ctx.fillStyle = "rgba(3, 8, 5, 0.72)";
+      ctx.strokeStyle = "rgba(255, 200, 87, 0.82)";
+      ctx.lineWidth = 2;
+      roundRect(boxX, boxY, boxW, boxH, 7, true, true);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillStyle = "#fff2b6";
+      ctx.shadowColor = "rgba(255, 200, 87, 0.85)";
+      ctx.shadowBlur = 12 + Math.sin(state.time * 5) * 4;
+      fitMonoFont(prompt, 24, 13, boxW - 26);
+      ctx.fillText(prompt, state.width / 2, boxY + boxH / 2);
+      ctx.shadowBlur = 0;
+      ctx.textBaseline = "alphabetic";
+      ctx.restore();
     }
 
     function drawBackgroundLayer(index, fallbackImage, offsetY) {
@@ -2145,8 +2217,8 @@
       const submitX = inputX + inputW + 8;
       const restartX = x + boxW - pad - buttonW;
       const controlsY = bottomY - buttonH;
-      const rowsTop = y + pad + 82;
-      const rowH = clamp((controlsY - rowsTop - 18) / LEADERBOARD_LIMIT, 22, 33);
+      const rowsTop = y + pad + 96;
+      const rowH = clamp((controlsY - rowsTop - 18) / LEADERBOARD_LIMIT, 19, 33);
 
       board.inputRect = { x: inputX, y: controlsY, w: inputW, h: inputH };
       board.submitRect = board.submitted ? null : { x: submitX, y: controlsY, w: buttonW, h: buttonH };
@@ -2165,6 +2237,10 @@
       ctx.fillStyle = "rgba(217, 255, 208, 0.76)";
       fitMonoFont(`UTC ${board.dateKey || todayBoardKey()}   SCORE ${state.score}`, 14, 9, boxW - pad * 2);
       ctx.fillText(`UTC ${board.dateKey || todayBoardKey()}   SCORE ${state.score}`, state.width / 2, y + pad + 48);
+      ctx.fillStyle = "#ffc857";
+      const resetText = `RESETS IN ${leaderboardResetCountdown()}`;
+      fitMonoFont(resetText, 16, 9, boxW - pad * 2);
+      ctx.fillText(resetText, state.width / 2, y + pad + 70);
 
       ctx.textAlign = "left";
       const entries = board.loading ? [] : board.entries;
@@ -2351,6 +2427,10 @@
 
       useControl(event, () => {
         const point = canvasPoint(event);
+        if (state.phase === "intro") {
+          showCharacterSelect();
+          return;
+        }
         if (state.phase === "select") {
           handleSelectPointer(point);
           return;
@@ -2431,6 +2511,11 @@
     document.addEventListener("contextmenu", (event) => event.preventDefault());
     window.addEventListener("keydown", (event) => {
       unlockAudio();
+      if (state.phase === "intro" && (event.code === "Enter" || event.code === "Space")) {
+        event.preventDefault();
+        showCharacterSelect();
+        return;
+      }
       if (state.phase === "over" && state.gameOverTimer <= 0) {
         if (event.code === "Enter") {
           event.preventDefault();
