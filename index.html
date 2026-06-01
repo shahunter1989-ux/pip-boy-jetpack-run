@@ -607,6 +607,7 @@
     const CAP_FIXED_RECHARGE_CHANCE = 0.25;
     const CHARACTERS_PER_PAGE = 8;
     const SELECT_DOUBLE_ACTIVATE_MS = 500;
+    const SELECT_SWIPE_MIN_PX = 45;
     const BACKGROUND_JUMPS_PER_SCENE = 8;
     const BACKGROUND_TRANSITION_SECONDS = 1.8;
     const BACKGROUND_LAYER_ZOOM = 1.08;
@@ -640,6 +641,7 @@
       characterPage: 0,
       selectionRects: [],
       pageButtonRects: [],
+      selectSwipe: null,
       lastSelectTapIndex: -1,
       lastSelectTapTime: 0,
       leaderboard: {
@@ -1608,8 +1610,8 @@
       ctx.fillStyle = "#9cff6d";
       ctx.shadowColor = "rgba(156, 255, 109, 0.55)";
       ctx.shadowBlur = 14;
-      fitMonoFont("CHOOSE PILOT", 30, 18, state.width - 44);
-      ctx.fillText("CHOOSE PILOT", state.width / 2, titleY);
+      fitMonoFont("CHOOSE YOUR GOOSE", 30, 18, state.width - 44);
+      ctx.fillText("CHOOSE YOUR GOOSE", state.width / 2, titleY);
       ctx.shadowBlur = 0;
 
       const pageCount = characterPageCount();
@@ -2265,6 +2267,10 @@
       };
     }
 
+    function isSelectSwipePointer(event) {
+      return event.pointerType === "touch" || event.pointerType === "pen";
+    }
+
     function promptForInitials() {
       const typed = window.prompt("Enter initials for the daily Top 5:", state.leaderboard.initials || "");
       if (typed !== null) {
@@ -2289,46 +2295,64 @@
       return true;
     }
 
+    function handleSelectPointer(point, now = performance.now()) {
+      const pageHit = state.pageButtonRects.find((rect) => pointInRect(point, rect));
+      if (pageHit) {
+        showCharacterPage(state.characterPage + pageHit.direction);
+        playTone("select");
+        return;
+      }
+
+      const hit = state.selectionRects.find((rect) => (
+        point.x >= rect.x &&
+        point.x <= rect.x + rect.w &&
+        point.y >= rect.y &&
+        point.y <= rect.y + rect.h
+      ));
+      if (!hit) {
+        resetSelectTapTracker();
+        return;
+      }
+
+      const isDoubleActivate = (
+        hit.index === state.selectedCharacter &&
+        hit.index === state.lastSelectTapIndex &&
+        now - state.lastSelectTapTime <= SELECT_DOUBLE_ACTIVATE_MS
+      );
+
+      if (isDoubleActivate) {
+        chooseCharacter(hit.index);
+        resetGame();
+        return;
+      }
+
+      state.selectedCharacter = hit.index;
+      state.lastSelectTapIndex = hit.index;
+      state.lastSelectTapTime = now;
+      playTone("select");
+      updateHud();
+    }
+
     function handleCanvasPointer(event) {
+      if (state.phase === "select" && isSelectSwipePointer(event)) {
+        useControl(event, () => {
+          state.selectSwipe = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            startTime: performance.now()
+          };
+          if (canvas.setPointerCapture) {
+            canvas.setPointerCapture(event.pointerId);
+          }
+        });
+        return;
+      }
+
       useControl(event, () => {
         const point = canvasPoint(event);
         if (state.phase === "select") {
-          const now = performance.now();
-          const pageHit = state.pageButtonRects.find((rect) => pointInRect(point, rect));
-          if (pageHit) {
-            showCharacterPage(state.characterPage + pageHit.direction);
-            playTone("select");
-            return;
-          }
-
-          const hit = state.selectionRects.find((rect) => (
-            point.x >= rect.x &&
-            point.x <= rect.x + rect.w &&
-            point.y >= rect.y &&
-            point.y <= rect.y + rect.h
-          ));
-          if (!hit) {
-            resetSelectTapTracker();
-            return;
-          }
-
-          const isDoubleActivate = (
-            hit.index === state.selectedCharacter &&
-            hit.index === state.lastSelectTapIndex &&
-            now - state.lastSelectTapTime <= SELECT_DOUBLE_ACTIVATE_MS
-          );
-
-          if (isDoubleActivate) {
-            chooseCharacter(hit.index);
-            resetGame();
-            return;
-          }
-
-          state.selectedCharacter = hit.index;
-          state.lastSelectTapIndex = hit.index;
-          state.lastSelectTapTime = now;
-          playTone("select");
-          updateHud();
+          handleSelectPointer(point);
           return;
         }
         if (state.phase === "over" && state.gameOverTimer <= 0) {
@@ -2337,6 +2361,47 @@
         }
         thrust();
       });
+    }
+
+    function handleCanvasPointerUp(event) {
+      if (!state.selectSwipe || event.pointerId !== state.selectSwipe.pointerId) {
+        return;
+      }
+      useControl(event, () => {
+        const swipe = state.selectSwipe;
+        state.selectSwipe = null;
+        if (canvas.releasePointerCapture) {
+          try {
+            canvas.releasePointerCapture(event.pointerId);
+          } catch (error) {
+            // Ignore release failures from browsers that already cleared capture.
+          }
+        }
+
+        if (state.phase !== "select") {
+          return;
+        }
+
+        const dx = event.clientX - swipe.startX;
+        const dy = event.clientY - swipe.startY;
+        const horizontal = Math.abs(dx);
+        const vertical = Math.abs(dy);
+        if (horizontal >= SELECT_SWIPE_MIN_PX && horizontal > vertical * 1.35) {
+          showCharacterPage(state.characterPage + (dx < 0 ? 1 : -1));
+          playTone("select");
+          return;
+        }
+
+        handleSelectPointer(canvasPoint(event), performance.now());
+      });
+    }
+
+    function cancelSelectSwipe(event) {
+      if (!state.selectSwipe || event.pointerId !== state.selectSwipe.pointerId) {
+        return;
+      }
+      state.selectSwipe = null;
+      resetSelectTapTracker();
     }
 
     function cycleCharacter(direction) {
@@ -2403,6 +2468,8 @@
       }
     });
     canvas.addEventListener("pointerdown", handleCanvasPointer, { passive: false });
+    canvas.addEventListener("pointerup", handleCanvasPointerUp, { passive: false });
+    canvas.addEventListener("pointercancel", cancelSelectSwipe, { passive: false });
     startButton.addEventListener("click", (event) => useControl(event, resetGame));
     pauseButton.addEventListener("click", (event) => useControl(event, togglePause));
     soundButton.addEventListener("click", (event) => useControl(event, toggleSound));
