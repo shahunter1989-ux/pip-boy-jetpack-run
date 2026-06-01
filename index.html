@@ -613,6 +613,8 @@
     const BACKGROUND_JUMPS_PER_SCENE = 8;
     const BACKGROUND_TRANSITION_SECONDS = 1.8;
     const BACKGROUND_LAYER_ZOOM = 1.08;
+    const GAMEPLAY_SPRITE_MAX_W = 90;
+    const GAMEPLAY_SPRITE_MAX_H = 72;
     let leaderboardDb = null;
     let leaderboardApi = null;
     let leaderboardInitPromise = null;
@@ -2023,7 +2025,7 @@
       const p = state.player;
       const character = characters[state.selectedCharacter] || characters[0];
       if (character.image.complete && character.image.naturalWidth) {
-        drawCharacterImage(character, p.x, p.y, character.spriteW, p.rotation, true);
+        drawCharacterImage(character, p.x, p.y, gameplaySpriteWidth(character), p.rotation, true);
         return;
       }
 
@@ -2032,6 +2034,16 @@
       ctx.rotate(p.rotation);
       drawFallbackPlayer(p);
       ctx.restore();
+    }
+
+    function gameplaySpriteWidth(character) {
+      const image = character.image;
+      const baseW = Math.min(character.spriteW, GAMEPLAY_SPRITE_MAX_W);
+      if (!image.complete || !image.naturalWidth || !image.naturalHeight) {
+        return baseW;
+      }
+      const ratio = image.naturalHeight / image.naturalWidth;
+      return Math.min(baseW, GAMEPLAY_SPRITE_MAX_H / ratio);
     }
 
     function drawFallbackPlayer(p) {
